@@ -105,8 +105,18 @@ def test_model(model, dataloader, model_loss, device, mean=0):
 
 def main():
 
+    print(torch.backends.mps.is_available())
+
+    if torch.backends.mps.is_available():
+        device = torch.device("mps")
+    elif torch.cuda.is_available():
+        device = torch.device("cuda")
+    else:
+        device = torch.device("cpu")
+
+    print("Using", device)
+
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print('Using {} device'.format(device)) #Use GPU if available
 
     model = CNN().to(device)
     print(model)
@@ -117,48 +127,11 @@ def main():
     train_dataset = AudioDatasetSpectrogram('./train_audioMNIST.csv')
     test_dataset = AudioDatasetSpectrogram('./test_audioMNIST.csv')
 
-    # spectrogram, label = next(iter(train_dataset))
-    # print(spectrogram.shape)
-    # import matplotlib.pyplot as plt
-    # plt.imshow(spectrogram[0], cmap='inferno')
-    # plt.show()
 
     train_loader = DataLoader(train_dataset, batch_size=50, shuffle=True, num_workers=10)
     test_loader = DataLoader(test_dataset, batch_size=50, shuffle=True, num_workers=10)
 
-    # train_losses, train_scores, test_losses, test_scores = [], [], [], []
-    # for epoch in range(30):
-    #     print('Epoch:', epoch)
-    #     train_loss, train_score = train_model(model, train_loader, model_loss, model_optimizer, device)
-    #     test_loss, test_score = test_model(model, test_loader, model_loss, device)
-    #     train_losses.append(train_loss)
-    #     train_scores.append(train_score)
-    #     test_losses.append(test_loss)
-    #     test_scores.append(test_score)
-    #     print(train_losses)
-    #     print(train_scores)
-    #     print(test_losses)
-    #     print(test_scores)
-
-    #   # Plot losses
-    #     plt.plot(train_losses, label="Train Loss")
-    #     plt.plot(test_losses, label="Test Loss")
-    #     plt.legend()
-    #     plt.title("Loss vs Epoch")
-    #     plt.xlabel("Epochs")
-    #     plt.ylabel("Loss")
-    #     plt.show()
-
-    #     # Plot accuracy
-    #     plt.plot(train_scores, label="Train Accuracy")
-    #     plt.plot(test_scores, label="Test Accuracy")
-    #     plt.legend()
-    #     plt.title("Accuracy vs Epoch")
-    #     plt.xlabel("Epochs")
-    #     plt.ylabel("Accuracy")
-    #     plt.show()
-
-
+ 
     train_losses, train_scores, test_losses, test_scores = [], [], [], []
     for epoch in range(30):
         print('Epoch:', epoch)
@@ -173,10 +146,10 @@ def main():
         print(test_losses)
         print(test_scores)
         
-    # グラフ化
+    # Tracer le graphique
     plt.figure(figsize=(12, 6))
 
-    # 損失のプロット
+    # Tracer la perte
     plt.subplot(1, 2, 1)
     plt.plot(np.arange(30), train_losses, label='Train Loss')
     plt.plot(np.arange(30), test_losses, label='Test Loss')
@@ -185,7 +158,7 @@ def main():
     plt.legend()
     plt.title('Loss over Epochs')
 
-    # 精度のプロット
+    # Tracer la précision
     plt.subplot(1, 2, 2)
     plt.plot(np.arange(30), train_scores, label='Train Accuracy')
     plt.plot(np.arange(30), test_scores, label='Test Accuracy')
@@ -194,9 +167,9 @@ def main():
     plt.legend()
     plt.title('Accuracy over Epochs')
 
-    # グラフを表示
+    # Afficher le graphique
     plt.tight_layout()
-    plt.savefig('loss_accuracy_curve.png')  # グラフ画像を保存
+    plt.savefig('loss_accuracy_curve.png')  # Sauvegarde de l'image de la courbe
     plt.show()
 
 

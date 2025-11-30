@@ -12,34 +12,46 @@ from torch import nn #API for building neural networks
 from torch.utils.data import Dataset, DataLoader #Imports the Dataset and Dataloader classes
 
 
-#あとで名前MultiModalDataset変更
+
 class MultiModalDataset(Dataset):
-    def __init__(self, annotations_file, train=True):
-    # MNISTデータセットのロード
+    def __init__(self, train=True):
+    # Chargement du dataset MNIST
         self.mnist = datasets.MNIST('data', train=train, download=True,
                                     transform=transforms.Compose([
                                         transforms.ToTensor(),
                                         transforms.Normalize((0.1307,), (0.3081,))
                                     ]))
         
-        # AudioMNIST のファイルテーブル(label, label, filepath) のタプルが複数入る
+        # Tableau contenant des tuples (label, filepath) pour AudioMNIST
         self.tableau = []
 
-        for digit in range(10):
-            folder = "recordings"
+        for digit in range(10): # Traiter chaque chiffre de 0 à 9
+            folder = "recordings" # Dossier contenant les fichiers audio d'AudioMNIST
             for foldername in os.listdir(folder):
+                # Sélectionner uniquement les fichiers dont le nom commence par le chiffre correspondant et se termine par ".wav"
+                # → Cela extrait uniquement les fichiers audio correspondant à l'étiquette du chiffre
                 if foldername.startswith(f"{digit}_") and foldername.endswith(".wav"):
-                    self.tableau.append((digit, os.path.join(folder, foldername))) #(ラベル, filepath) というタプルを self.tableau に追加
+                    self.tableau.append((digit, os.path.join(folder, foldername))) # Ajouter le tuple (label, filepath) à self.tableau
         
-   
+        mnist_size = len(self.mnist)
+        audio_size = len(self.tableau)
+        
+        # Ajuster la taille en fonction du plus petit dataset si MNIST et AudioMNIST n'ont pas le même nombre d'échantillons
+        self.size = min(mnist_size, audio_size)
+
         self.ToSpectrogram = torchaudio.transforms.MelSpectrogram()
 
         
     def __len__(self):
-        return(len(self.mnist))
+        return self.size   # Retourne la taille du dataset
     
     def __getitem__(self, index):
-        # MNISTの画像とラベル
+
+         # Vérifier si l'indice est dans la plage
+        if index >= self.size:
+            raise IndexError(f"Index {index} out of range for dataset with size {self.size}")
+       
+       # Image et label MNIST
         image, label = self.mnist[index]
 
         # Récupérer le chemin du fichier audio
@@ -61,43 +73,76 @@ class MultiModalDataset(Dataset):
 
         return image, spectrogram, label
 
-
-
-
-#conv2dの定義は、input shape = (N:taille de badge, C, H, W)
+# Définition de conv2d, input shape = (N: taille du batch, C, H, W)
 
 class AudioCNN(nn.Module):
     def __init__(self):
         super(AudioCNN, self).__init__()
         self.ConvNet = nn.Sequential(
-            nn.Conv2d(in_channels=1, out_channels=10, kernel_size=7, stride=3), #要検討（入力データのチャンネル数、畳み込みで学習するフィルタの数、カーネルの大きさ）
+            nn.Conv2d(in_channels=1, out_channels=10, kernel_size=7, stride=3), 
             nn.ReLU(),
-            nn.Conv2d(in_channels=10, out_channels=10, kernel_size=5, stride=2), #要検討
+            nn.Conv2d(in_channels=10, out_channels=10, kernel_size=5, stride=2),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(38*19*10, 10) #要確認
+            nn.Linear(7220, 10) 
         )
         
     def forward(self, x):
         logits = self.ConvNet(x)
-        return(logits)
+        return logits
     
+    # def forward(self, x):
+    #     print("AudioCNN input shape:", x.shape)  # 入力形状をプリント
+    #     x = self.ConvNet[0](x)  # 最初のConv2d
+    #     print("After 1st Conv2d:", x.shape)  # 1回目のConv2d後の形状
+    #     x = self.ConvNet[2](x)  # 2回目のConv2d
+    #     print("After 2nd Conv2d:", x.shape)  # 2回目のConv2d後の形状
+    #     x = self.ConvNet[4](x)  # Flatten
+    #     print("After Flatten:", x.shape)  # Flatten後の形状
+    #     x = self.ConvNet[5](x)  # Linear
+    #     print("After Linear:", x.shape)  # Linear後の形状
+    #     return x
 
 class ImageCNN(nn.Module):
     def __init__(self):
         super(ImageCNN, self).__init__()
-        self.ConvNet = nn.Sequential(   
-            nn.Conv2d(in_channels=1, out_channels=10, kernel_size=7, stride=3), #要検討
+        self.ConvNet = nn.Sequential(
+            nn.Conv2d(in_channels=1, out_channels=10, kernel_size=7, stride=3),
             nn.ReLU(),
-            nn.Conv2d(in_channels=10, out_channels=10, kernel_size=5, stride=2), #要検討
+            nn.Conv2d(in_channels=10, out_channels=10, kernel_size=5, stride=2),
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(38*19*10, 10) #要確認
+            nn.Linear(40, 10) 
         )
-        
+
     def forward(self, x):
         logits = self.ConvNet(x)
-        return(logits)
+        return logits
+
+    # def forward(self, x):
+    #     print("ImageCNN input shape:", x.shape)
+    #     x = self.ConvNet[0](x)  # 最初のConv2d
+    #     print("After 1st Conv2d:", x.shape)
+    #     x = self.ConvNet[2](x)  # 2回目のConv2d
+    #     print("After 2nd Conv2d:", x.shape)
+    #     x = self.ConvNet[4](x)  # Flatten
+    #     print("After Flatten:", x.shape)
+    #     x = self.fc(x)  # 全結合層を直接適用
+    #     print("After Linear:", x.shape)
+    #     return x
+
+    # def forward(self, x):
+    #     print("AudioCNN input shape:", x.shape)  # 入力形状をプリント
+    #     x = self.ConvNet[0](x)  # 最初のConv2d
+    #     print("After 1st Conv2d:", x.shape)  # 1回目のConv2d後の形状
+    #     x = self.ConvNet[2](x)  # 2回目のConv2d
+    #     print("After 2nd Conv2d:", x.shape)  # 2回目のConv2d後の形状
+    #     x = self.ConvNet[4](x)  # Flatten
+    #     print("After Flatten:", x.shape)  # Flatten後の形状
+    #     x = self.ConvNet[5](x)  # Linear
+    #     print("After Linear:", x.shape)  # Linear後の形状
+    #     return x
+
     
 
 class LateFusionCNN(nn.Module):
@@ -107,26 +152,28 @@ class LateFusionCNN(nn.Module):
         self.image_cnn = ImageCNN()
         self.audio_cnn = AudioCNN()
 
-        # 画像も音声も最終的に32*4*4=512 の特徴にする設計 で返してきたが、
-        # 上のImageCNN　AudioCNNでは　それぞれ10次元
+        # Couche recevant les caractéristiques fusionnées
         self.ConvNet = nn.Sequential(
-            nn.Linear(10 + 10, 64), #なに？　結合された 20 次元（10+10）を受け取り、より高次の 64 次元特徴に変換する層
-            nn.ReLU(),                  #なにをしている？非線形変換（活性化関数) 0か1以上
-            nn.Linear(64, 10)          #なにをしている？最終的に 10 クラス（数字 0〜9）のロジットに変換
+            nn.Linear(20, 64),  # Dimensions d'entrée = 20 (10 features image + 10 features audio)
+            nn.ReLU(),
+            nn.Linear(64, 10)  # Conversion finale en 10 classes
         )
     
     def forward(self, image, audio):
-        # CNN で別々に特徴抽出
+        # Extraire les caractéristiques avec les CNN
         img_feat = self.image_cnn(image)
         aud_feat = self.audio_cnn(audio)
 
-        # 結合（late fusion）
+        # Fusion tardive des caractéristiques
         fusion = torch.cat((img_feat, aud_feat), dim=1)
 
-        # 全結合で分類
-        logits = self.ConvNet(fusion) #最終的なクラスをここで返す
+        # Classification via couches fully-connected
+        logits = self.ConvNet(fusion)  # 最終的にクラスを出力
         return logits
-    
+
+
+
+
 
 
     
@@ -135,18 +182,17 @@ def train_model(model, dataloader, model_loss, optimizer, device, mean=0):
     total_loss = 0
     total_correct = 0
     model.train() # Specifies that the model should compute gradients
-    for images, spectrograms, labels in dataloader:  #バッジの中の50のデータを処理
-        #Zero mean and transfer data to device
+    for images, spectrograms, labels in dataloader:  # Traiter le batch de 50 échantillons
         images = images.to(device)
         spectrograms = spectrograms.to(device)-mean
         labels = labels.to(device)
         # Forward pass
-        prediction = model(images, spectrograms)# 50個を一気に処理
-        loss = model_loss(prediction, labels.long()) #バッジの平均ロス
+        prediction = model(images, spectrograms)# Traitement de 50 échantillons
+        loss = model_loss(prediction, labels.long()) # Perte moyenne sur le batch
         # Update loss and score
-        total_loss += loss.item() # 一度のエポック内で全てのバッジの平均を足していく
+        total_loss += loss.item() # Addition de la perte de tous les batches dans l'epoch
         total_correct += (prediction.argmax(1)==labels).sum().item()
-        # Backward pass
+        # Backward 
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
@@ -182,20 +228,24 @@ def test_model(model, dataloader, model_loss, device, mean=0):
 def main():
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print('Using {} device'.format(device)) #Use GPU if available
 
     model = LateFusionCNN().to(device)
-    print(model)
+    print(model) # Initialiser le modèle LateFusionCNN et le transférer sur le device
 
+    # Définir la fonction de perte
     model_loss = nn.CrossEntropyLoss()
+    # Définir l'optimiseur SGD avec un learning rate de 0.001 et un momentum de 0.9
     model_optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
+    # Créer les datasets multimodaux pour l'entraînement et le test
     train_dataset = MultiModalDataset('./train_audioMNIST.csv')
     test_dataset = MultiModalDataset('./test_audioMNIST.csv')
 
+    # Créer le DataLoader 
     train_loader = DataLoader(train_dataset, batch_size=50, shuffle=True, num_workers=10) #num_workers=10とは
     test_loader = DataLoader(test_dataset, batch_size=50, shuffle=True, num_workers=10)
 
+    # Listes pour stocker les pertes et précisions à chaque epoch 
     train_losses, train_scores, test_losses, test_scores = [], [], [], []
 
     for epoch in range(30):
@@ -211,10 +261,10 @@ def main():
         print(test_losses)
         print(test_scores)
         
-    # グラフ化
+    # Tracer le graphique
     plt.figure(figsize=(12, 6))
 
-    # 損失のプロット
+    # Tracer la perte
     plt.subplot(1, 2, 1)
     plt.plot(np.arange(30), train_losses, label='Train Loss')
     plt.plot(np.arange(30), test_losses, label='Test Loss')
@@ -223,7 +273,7 @@ def main():
     plt.legend()
     plt.title('Loss over Epochs Late fusion')
 
-    # 精度のプロット
+    # Tracer accuracy
     plt.subplot(1, 2, 2)
     plt.plot(np.arange(30), train_scores, label='Train Accuracy')
     plt.plot(np.arange(30), test_scores, label='Test Accuracy')
@@ -232,22 +282,10 @@ def main():
     plt.legend()
     plt.title('Accuracy over Epochs')
 
-    # グラフを表示
+    # Afficher le graphique
     plt.tight_layout()
-    plt.savefig('loss_accuracy_curve.png')  # グラフ画像を保存
+    plt.savefig('lateloss_accuracy_curve.png')  # Sauvegarde de l'image de la courbe
     plt.show()
 
 if __name__ == '__main__':
     main()
-    
-
-
-#問題
-
-#MelSpectrogram の出力 size と Linear(381910) が一致しない
-
-#torchaudio.load(audio_path) の返り値の扱いが誤っている
-
-#AudioMNIST の件数と MNIST の件数が一致しない
-
-#num_workers=10 は危険 らしい

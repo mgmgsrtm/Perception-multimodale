@@ -8,30 +8,31 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
-from torch import nn #API for building neural networks
-from torch.utils.data import Dataset, DataLoader #Imports the Dataset and Dataloader classes
+from torch import nn 
+from torch.utils.data import Dataset, DataLoader 
 
 class MultimodaleDataset(Dataset):
     def __init__(self, annotations_file, train=True):
-        # MNISTデータセットのロード
+        # Chargement du dataset MNIST
         self.mnist = datasets.MNIST('data', train=train, download=True,
                                     transform=transforms.Compose([
                                         transforms.ToTensor(),
                                         transforms.Normalize((0.1307,), (0.3081,))
                                     ]))
         
-        # CSVファイルを使って音声データのパスとラベルを取得
+        # Charger les chemins et labels des fichiers audio à partir d'un fichier CSV
         self.annotations = pd.read_csv(annotations_file, header=None, 
                                        names=['Path', 'Label'], delimiter=',')
 
-        # 画像と音声データを格納するリスト
+        # Liste pour stocker les données images et audio
         self.tableau = []
         
-        # MNISTデータセットと音声データを対応させる
+        # Associer chaque image MNIST à un fichier audio
         for i in range(len(self.mnist)):
             image, label = self.mnist[i]
-            # 音声データをランダムに選択
-            audio_paths = self.annotations[self.annotations['Label'] == label]['Path'].tolist() #Trueとなる行は音声ファイルがlabelに対応しているものをPythonのリストに変換
+            # Sélection aléatoire d'un fichier audio correspondant au label
+            # Convertir en liste les chemins audio dont le label correspond
+            audio_paths = self.annotations[self.annotations['Label'] == label]['Path'].tolist()
             audio_path = random.choice(audio_paths)
             self.tableau.append((image, label, audio_path))
     
@@ -39,49 +40,43 @@ class MultimodaleDataset(Dataset):
         return len(self.mnist)
     
     def __getitem__(self, index):
-        # MNISTの画像とラベル
+        # Récupérer l'image et le label MNIST
         image, label = self.mnist[index]
         
-        # 音声データのパス取得
+        # Récupérer le chemin du fichier audio
         audio_path = self.tableau[index][2]
         
-        # 音声データをスペクトログラムに変換
+         # Convertir le fichier audio en spectrogramme
         pt_path = os.path.splitext(audio_path)[0] + '.pt'
         
-        # スペクトログラムをロード、または計算
+         # Charger le spectrogramme depuis le fichier .pt, sinon le calculer
         if os.path.exists(pt_path):
             spectrogram = torch.load(pt_path, weights_only=True)
         else:
-            audio_padded = torch.zeros((1, 48000))  # オーディオの長さに合わせて
+            audio_padded = torch.zeros((1, 48000))  # Ajuster à la longueur de l'audio
             audio = torchaudio.load(audio_path)
-            audio_padded[0, :len(audio[0])] = audio[0]  # 0チャンネルを使用
+            audio_padded[0, :len(audio[0])] = audio[0]  # Utiliser le canal 0
             spectrogram = self.ToSpectrogram(audio_padded)
 
-        # この1行を入れないとMNIST のスケール差が 100〜1000倍
-        # この行の意義　音声スペクトログラムの値の大きさを、画像(MNIST)と同じくらいのスケールに整えること
-        # spectrogram = (spectrogram - spectrogram.mean()) / (spectrogram.std() + 1e-6)
+        # Normaliser le spectrogramme pour avoir une échelle comparable à MNIST
+        spectrogram = (spectrogram - spectrogram.mean()) / (spectrogram.std() + 1e-6)
 
-
-        # この時点で、[X, X, X, X] なのか[X, X, X,]なのか　ノートを見る
-        # # この時点で、[X, X, X,]を[X, X, X, X] 変える必要があるらしい
-
+        # Redimensionner le spectrogramme si nécessaire pour correspondre à 28x28
         if spectrogram.size(1) != 28 or spectrogram.size(2) != 28:
             spectrogram_resized = F.interpolate(spectrogram.unsqueeze(0), size=(28, 28), mode='bilinear', align_corners=False).squeeze(0)
         else:
             spectrogram_resized = spectrogram    
 
         
-        # 画像とスペクトログラムを水平方向に結合
-        image_stucked = torch.cat((image, spectrogram_resized), dim=0)  # dim=0でスタック
+        # Empiler horizontalement l'image et le spectrogramme
+        image_stucked = torch.cat((image, spectrogram_resized), dim=0)  # empilement sur dim=0
 
-        #ここで、ちゃんと[2,28,28]になっているか 
-        
         return image_stucked, label
     
 
     def ToSpectrogram(self, audio):
-        # スペクトログラムの計算（簡単な例）
-        # ここではSTFT（短時間フーリエ変換）を使用
+        # Calcul du spectrogramme à partir de l'audio
+        # Ici, utilisation de la STFT (Transformée de Fourier à court terme)
         return torchaudio.transforms.MelSpectrogram()(audio)
 
     # def ToDB(self, spectrogram):
@@ -94,12 +89,12 @@ class CNN(nn.Module):
     def __init__(self):
         super(CNN, self).__init__()
         self.ConvNet = nn.Sequential(
-            nn.Conv2d(in_channels=2, out_channels=10, kernel_size=7, stride=3),#要検討
+            nn.Conv2d(in_channels=2, out_channels=10, kernel_size=7, stride=3),#
             nn.ReLU(),
-            nn.Conv2d(in_channels=10, out_channels=10, kernel_size=5, stride=2),#要検討
+            nn.Conv2d(in_channels=10, out_channels=10, kernel_size=5, stride=2),#
             nn.ReLU(),
             nn.Flatten(),
-            nn.Linear(10 * 2 * 2, 10)# なぜこの数字になったか
+            nn.Linear(10 * 2 * 2, 10)
         )
         
     def forward(self, x):
@@ -155,65 +150,32 @@ def test_model(model, dataloader, model_loss, device, mean=0):
 def main():
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print('Using {} device'.format(device)) #Use GPU if available
 
+    # Initialiser le modèle et le transférer sur le device
     model = CNN().to(device)
     print(model)
 
     model_loss = nn.CrossEntropyLoss()
+
+    # Définir l'optimiseur SGD avec learning rate et momentum
     model_optimizer = torch.optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
 
+    # Créer le dataset d'entraînement multimodal
     train_dataset = MultimodaleDataset(train=True, annotations_file='./train_audioMNIST.csv')
 
-    # print("=== デバッグ：画像ラベル と 音声ファイル対応チェック ===")
+    # print("----- Vérification paire -------")
     # for i in range(10):
     #     img, label, audio_path = train_dataset.tableau[i]
     #     print(label, audio_path)
 
+    # Créer le dataset de test multimodal
     test_dataset = MultimodaleDataset(train=False, annotations_file='./test_audioMNIST.csv')
 
-
-
-    # spectrogram, label = next(iter(train_dataset))
-    # print(spectrogram.shape)
-    # import matplotlib.pyplot as plt
-    # plt.imshow(spectrogram[0], cmap='inferno')
-    # plt.show()
-
+    # Créer les DataLoaders
     train_loader = DataLoader(train_dataset, batch_size=50, shuffle=True, num_workers=10)
     test_loader = DataLoader(test_dataset, batch_size=50, shuffle=True, num_workers=10)
 
-    # train_losses, train_scores, test_losses, test_scores = [], [], [], []
-    # for epoch in range(30):
-    #     print('Epoch:', epoch)
-    #     train_loss, train_score = train_model(model, train_loader, model_loss, model_optimizer, device)
-    #     test_loss, test_score = test_model(model, test_loader, model_loss, device)
-    #     train_losses.append(train_loss)
-    #     train_scores.append(train_score)
-    #     test_losses.append(test_loss)
-    #     test_scores.append(test_score)
-    #     print(train_losses)
-    #     print(train_scores)
-    #     print(test_losses)
-    #     print(test_scores)
-
-    #   # Plot losses
-    #     plt.plot(train_losses, label="Train Loss")
-    #     plt.plot(test_losses, label="Test Loss")
-    #     plt.legend()
-    #     plt.title("Loss vs Epoch")
-    #     plt.xlabel("Epochs")
-    #     plt.ylabel("Loss")
-    #     plt.show()
-
-    #     # Plot accuracy
-    #     plt.plot(train_scores, label="Train Accuracy")
-    #     plt.plot(test_scores, label="Test Accuracy")
-    #     plt.legend()
-    #     plt.title("Accuracy vs Epoch")
-    #     plt.xlabel("Epochs")
-    #     plt.ylabel("Accuracy")
-    #     plt.show()
+   
 
 
     train_losses, train_scores, test_losses, test_scores = [], [], [], []
@@ -230,10 +192,10 @@ def main():
         print(test_losses)
         print(test_scores)
         
-    # グラフ化
+    # Visualisation
     plt.figure(figsize=(12, 6))
 
-    # 損失のプロット
+     # Tracé des pertes
     plt.subplot(1, 2, 1)
     plt.plot(np.arange(30), train_losses, label='Train Loss')
     plt.plot(np.arange(30), test_losses, label='Test Loss')
@@ -242,7 +204,7 @@ def main():
     plt.legend()
     plt.title('Loss over Epochs Early fusion')
 
-    # 精度のプロット
+    # Tracé des précisions
     plt.subplot(1, 2, 2)
     plt.plot(np.arange(30), train_scores, label='Train Accuracy')
     plt.plot(np.arange(30), test_scores, label='Test Accuracy')
@@ -251,9 +213,9 @@ def main():
     plt.legend()
     plt.title('Accuracy over Epochs')
 
-    # グラフを表示
+    # Affichage du graphique
     plt.tight_layout()
-    plt.savefig('loss_accuracy_curve.png')  # グラフ画像を保存
+    plt.savefig('earlyloss_accuracy_curve.png')  # Sauvegarder le graphique
     plt.show()
 
 

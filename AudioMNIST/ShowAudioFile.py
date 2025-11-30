@@ -3,14 +3,13 @@ import torch
 import torchaudio
 import matplotlib.pyplot as plt
 
-#ToSpectrogram = torchaudio.transforms.MelSpectrogram()
 ToSpectrogram = torchaudio.transforms.MelSpectrogram(
-    #sample_rate=16000,  # サンプルレート（音声のサンプリング周波数）
-    n_fft=400,          # FFTサイズ
-    hop_length=160,     # スライディングウィンドウのステップ
-    n_mels=256,         # メルフィルターバンクの数
-    f_min=0,            # 最小周波数
-    f_max=8000          # 最大周波数
+    sample_rate=16000,  # Taux d'échantillonnage (fréquence d'échantillonnage du signal audio)
+    n_fft=400,          # Taille de la FFT
+    hop_length=160,     # Pas de la fenêtre glissante
+    n_mels=256,         # Nombre de filtres Mel
+    f_min=0,            # Fréquence minimale
+    f_max=8000          # Fréquence maximale
 )
 
 ToDB = torchaudio.transforms.AmplitudeToDB()
